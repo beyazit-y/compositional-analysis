@@ -73,7 +73,7 @@ if __name__ == "__main__":
     sampler = ScenicSampler.fromScenario(args.scenario)
 
     params = DotMap(
-        n_iters=args.iters,
+        n_iters=args.n,
         save_error_table=True,
     )
 
