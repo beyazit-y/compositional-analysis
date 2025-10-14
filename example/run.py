@@ -53,7 +53,7 @@ if __name__ == "__main__":
         help="Scenic file"
     )
     parser.add_argument(
-        "--iters",
+        "--n",
         type=int,
         default=2,
         help="Number of falsification iterations"
