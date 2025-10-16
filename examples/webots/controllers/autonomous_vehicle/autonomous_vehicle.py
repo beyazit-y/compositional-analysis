@@ -3,7 +3,7 @@ Autonomous vehicle controller example (Python version)
 Equivalent to Cyberbotics' C controller.
 """
 
-from controller import Robot, Keyboard, Camera, Display, GPS, Lidar
+from controller import Robot, Camera, Display, GPS, Lidar
 from vehicle import Driver
 import math
 
@@ -48,28 +48,6 @@ manual_steering = 0
 autodrive = True
 
 
-# --- Helper functions ---
-def print_help():
-    print("You can drive this car!")
-    print("Select the 3D window and use the arrow keys:")
-    print("[LEFT]/[RIGHT] - steer")
-    print("[UP]/[DOWN] - accelerate/slow down")
-
-
-def set_autodrive(onoff):
-    global autodrive
-    if autodrive == onoff:
-        return
-    autodrive = onoff
-    if not autodrive:
-        print("Switching to manual drive... Hit [A] to return to auto-drive.")
-    else:
-        if has_camera:
-            print("Switching to auto-drive...")
-        else:
-            print("Cannot switch to auto-drive without camera...")
-
-
 def set_speed(kmh):
     global speed
     kmh = min(kmh, 250.0)
@@ -89,35 +67,6 @@ def set_steering_angle(wheel_angle):
 
     steering_angle = max(min(wheel_angle, 0.5), -0.5)
     driver.setSteeringAngle(steering_angle)
-
-
-def change_manual_steer_angle(inc):
-    global manual_steering
-    set_autodrive(False)
-    new_manual = manual_steering + inc
-    if -25.0 <= new_manual <= 25.0:
-        manual_steering = new_manual
-        set_steering_angle(manual_steering * 0.02)
-
-    if manual_steering == 0:
-        print("Going straight")
-    else:
-        direction = "left" if steering_angle < 0 else "right"
-        print(f"Turning {steering_angle:.2f} rad ({direction})")
-
-
-def check_keyboard():
-    key = keyboard.getKey()
-    if key == Keyboard.UP:
-        set_speed(speed + 5.0)
-    elif key == Keyboard.DOWN:
-        set_speed(speed - 5.0)
-    elif key == Keyboard.RIGHT:
-        change_manual_steer_angle(+1)
-    elif key == Keyboard.LEFT:
-        change_manual_steer_angle(-1)
-    elif key == ord('A'):
-        set_autodrive(True)
 
 
 def color_diff(a, b):
@@ -236,7 +185,6 @@ def applyPID(yellow_line_angle):
 # --- Initialization ---
 driver = Driver()
 robot = driver  # alias for consistency
-keyboard = Keyboard()
 
 # Detect devices
 for i in range(robot.getNumberOfDevices()):
@@ -285,13 +233,9 @@ driver.setDippedBeams(True)
 driver.setAntifogLights(True)
 driver.setWiperMode(Driver.SLOW)
 
-print_help()
-keyboard.enable(TIME_STEP)
-
 # --- Main loop ---
 i = 0
 while driver.step() != -1:
-    check_keyboard()
 
     if i % int(TIME_STEP / robot.getBasicTimeStep()) == 0:
         camera_image = camera.getImage() if has_camera else None
