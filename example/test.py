@@ -33,6 +33,10 @@ def test_env():
         random_lane_width=True,
         random_agent_model=True,
         random_lane_num=True,
+        vehicle_config={
+            "spawn_velocity": [10.0, 0.0], # m/s; default max_speed_km_h is 80 km/h
+            "spawn_velocity_car_frame": True
+        }
     )
     return MetaDriveEnv(config)
 
