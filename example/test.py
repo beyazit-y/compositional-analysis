@@ -18,7 +18,7 @@ from stable_baselines3.common.vec_env.subproc_vec_env import SubprocVecEnv
 
 def test_env():
     config = dict(
-        map=4,
+        map=5,
         discrete_action=True,
         discrete_throttle_dim=3,
         discrete_steering_dim=3,

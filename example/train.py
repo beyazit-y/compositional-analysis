@@ -18,7 +18,7 @@ from stable_baselines3.common.vec_env.subproc_vec_env import SubprocVecEnv
 
 def train_env():
     config = dict(
-        map=4,
+        map=5,
         discrete_action=True,
         discrete_throttle_dim=3,
         discrete_steering_dim=3,
@@ -48,6 +48,16 @@ if __name__ == "__main__":
         type=str,
         default="storage",
         help="Directory to save the trained model")
+    parser.add_argument(
+        "--n-envs",
+        type=int,
+        default=16,
+        help="Number of parallel environments")
+    parser.add_argument(
+        "--timesteps",
+        type=int,
+        default=1_000_000,
+        help="Number of environment steps")
     args = parser.parse_args()
 
     # while True:
@@ -65,13 +75,12 @@ if __name__ == "__main__":
     #     clear_output()
 
     set_random_seed(args.seed)
-    n_envs = 16
-    env = SubprocVecEnv([partial(train_env) for _ in range(n_envs)])
+    env = SubprocVecEnv([partial(train_env) for _ in range(args.n_envs)])
     model = PPO("MlpPolicy", 
                 env=env,
                 n_steps=4096,
                 verbose=1)
-    model.learn(total_timesteps=1_000_000,
+    model.learn(total_timesteps=args.timesteps,
                 log_interval=1)
     env.close()
     clear_output()
