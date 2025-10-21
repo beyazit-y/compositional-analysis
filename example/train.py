@@ -11,6 +11,7 @@ from metadrive.envs import MetaDriveEnv
 from IPython.display import Image, clear_output
 from metadrive.utils.doc_utils import generate_gif
 from metadrive.component.map.base_map import BaseMap
+from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.utils import set_random_seed
 from metadrive.component.map.pg_map import MapGenerateMethod
 from stable_baselines3.common.vec_env.subproc_vec_env import SubprocVecEnv
@@ -33,7 +34,7 @@ def train_env():
         random_agent_model=True,
         random_lane_num=True,
     )
-    return MetaDriveEnv(config)
+    return Monitor(MetaDriveEnv(config))
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train policy in MetaDrive")
