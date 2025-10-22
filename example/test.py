@@ -139,7 +139,7 @@ if __name__ == "__main__":
                     screen_record=True,
                     window=False,
                     screen_size=(600, 600),
-                    camera_position=(50, 50),
+                    camera_position=env.vehicle.position,
                 )
 
             print(f"Episode reward: {total_reward:.2f}")
