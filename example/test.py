@@ -15,17 +15,18 @@ from metadrive.component.map.base_map import BaseMap
 from stable_baselines3.common.utils import set_random_seed
 from metadrive.component.map.pg_map import MapGenerateMethod
 from stable_baselines3.common.vec_env.subproc_vec_env import SubprocVecEnv
+from metadrive.utils.draw_top_down_map import draw_top_down_map
 
-def test_env():
+def test_env(scenario):
     config = dict(
-        map="SXS",
+        map=scenario,
         discrete_action=True,
         discrete_throttle_dim=3,
         discrete_steering_dim=3,
         horizon=1000,
         random_spawn_lane_index=True,
         num_scenarios=1000,
-        start_seed=1000,
+        start_seed=10000,
         traffic_density=0.1,
         need_inverse_traffic=True,
         accident_prob=0.1,
@@ -62,13 +63,34 @@ if __name__ == "__main__":
         type=int,
         default=10,
         help="Number of test samples")
+    parser.add_argument(
+        "--scenario",
+        type=str,
+        default="XX",
+        help="Scenario string")
     args = parser.parse_args()
+
+    # while True:
+    #     env=test_env(args.scenario)
+    #     env.reset()
+    #     ret = draw_top_down_map(env.current_map)
+    #     # ret = env.render(mode="topdown", window=False)
+    #     # ret = env.render(mode="topdown",
+    #     #                  window=False,
+    #     #                  # screen_size=(600, 600),
+    #     #                  # camera_position=(50, 50)
+    #     #                  )
+    #     env.close()
+    #     plt.axis("off")
+    #     plt.imshow(ret)
+    #     plt.show()
+    #     clear_output()
 
     set_random_seed(args.seed)
 
     model = PPO.load(args.model)
 
-    env = test_env()
+    env = test_env(args.scenario)
 
     all_traces = []
     csv_path = os.path.join(args.save_dir, "traces.csv")
