@@ -20,18 +20,16 @@ from metadrive.utils.draw_top_down_map import draw_top_down_map
 def test_env(scenario):
     config = dict(
         map=scenario,
-        discrete_action=True,
-        horizon=3000,
-        random_spawn_lane_index=True,
+        discrete_action=False,
+        horizon=2000,
         num_scenarios=1000,
         start_seed=1000,
         traffic_density=0.05,
         need_inverse_traffic=True,
         accident_prob=0.0,
-        log_level=50,
         random_lane_width=False,
         random_agent_model=False,
-        random_lane_num=True,
+        random_lane_num=False,
         vehicle_config={
             "spawn_velocity": [10.0, 0.0], # m/s; default max_speed_km_h is 80 km/h
             "spawn_velocity_car_frame": True

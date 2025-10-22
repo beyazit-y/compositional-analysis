@@ -21,18 +21,16 @@ from metadrive.utils.draw_top_down_map import draw_top_down_map
 def train_env(monitor=True):
     config = dict(
         map=2,
-        discrete_action=True,
-        horizon=3000,
-        random_spawn_lane_index=True,
+        discrete_action=False,
+        horizon=2000,
         num_scenarios=1000,
         start_seed=1000,
         traffic_density=0.05,
         need_inverse_traffic=True,
         accident_prob=0.0,
-        log_level=50,
         random_lane_width=False,
         random_agent_model=False,
-        random_lane_num=True,
+        random_lane_num=False,
     )
     if monitor:
         return Monitor(MetaDriveEnv(config))
