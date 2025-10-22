@@ -24,13 +24,13 @@ def test_env(scenario):
         horizon=3000,
         random_spawn_lane_index=True,
         num_scenarios=1000,
-        start_seed=10000,
+        start_seed=1000,
         traffic_density=0.05,
         need_inverse_traffic=True,
         accident_prob=0.0,
         log_level=50,
-        random_lane_width=True,
-        random_agent_model=True,
+        random_lane_width=False,
+        random_agent_model=False,
         random_lane_num=True,
         vehicle_config={
             "spawn_velocity": [10.0, 0.0], # m/s; default max_speed_km_h is 80 km/h
