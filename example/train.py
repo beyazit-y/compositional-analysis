@@ -15,14 +15,16 @@ from stable_baselines3.common.monitor import Monitor
 from stable_baselines3.common.utils import set_random_seed
 from metadrive.component.map.pg_map import MapGenerateMethod
 from stable_baselines3.common.vec_env.subproc_vec_env import SubprocVecEnv
+from metadrive.utils.draw_top_down_map import draw_top_down_map
 
-def train_env():
+
+def train_env(monitor=True):
     config = dict(
-        map=5,
+        map=3,
         discrete_action=True,
         discrete_throttle_dim=3,
         discrete_steering_dim=3,
-        horizon=1000,
+        horizon=3000,
         random_spawn_lane_index=True,
         num_scenarios=1000,
         start_seed=1000,
@@ -34,7 +36,10 @@ def train_env():
         random_agent_model=True,
         random_lane_num=True,
     )
-    return Monitor(MetaDriveEnv(config))
+    if monitor:
+        return Monitor(MetaDriveEnv(config))
+    else:
+        return MetaDriveEnv(config)
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Train policy in MetaDrive")
@@ -61,13 +66,15 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # while True:
-    #     env=train_env()
-    #     temp = env.reset()
-    #     print(temp)
-    #     ret = env.render(mode="topdown", 
-    #                      window=False,
-    #                      screen_size=(600, 600), 
-    #                      camera_position=(50, 50))
+    #     env=train_env(monitor=False)
+    #     env.reset()
+    #     ret = draw_top_down_map(env.current_map)
+    #     # ret = env.render(mode="topdown", window=False)
+    #     # ret = env.render(mode="topdown",
+    #     #                  window=False,
+    #     #                  # screen_size=(600, 600),
+    #     #                  # camera_position=(50, 50)
+    #     #                  )
     #     env.close()
     #     plt.axis("off")
     #     plt.imshow(ret)

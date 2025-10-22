@@ -137,9 +137,7 @@ if __name__ == "__main__":
                 env.render(
                     mode="topdown",
                     screen_record=True,
-                    window=False,
-                    screen_size=(600, 600),
-                    camera_position=env.vehicle.position,
+                    window=False
                 )
 
             print(f"Episode reward: {total_reward:.2f}")
