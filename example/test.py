@@ -17,26 +17,7 @@ from stable_baselines3.common.utils import set_random_seed
 from metadrive.component.map.pg_map import MapGenerateMethod
 from stable_baselines3.common.vec_env.subproc_vec_env import SubprocVecEnv
 from metadrive.utils.draw_top_down_map import draw_top_down_map
-
-def test_env(scenario):
-    config = dict(
-        map=scenario,
-        discrete_action=False,
-        horizon=2000,
-        num_scenarios=1000,
-        start_seed=1000,
-        traffic_density=0.05,
-        need_inverse_traffic=True,
-        accident_prob=0.0,
-        random_lane_width=False,
-        random_agent_model=False,
-        random_lane_num=False,
-        # vehicle_config={
-        #     "spawn_velocity": [10.0, 0.0], # m/s; default max_speed_km_h is 80 km/h
-        #     "spawn_velocity_car_frame": True
-        # }
-    )
-    return MetaDriveEnv(config)
+from train import make_env
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Test policy in MetaDrive")
@@ -68,7 +49,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # while True:
-    #     env=test_env(args.scenario)
+    #     env=make_env(scenario=args.scenario, monitor=False)
     #     env.reset()
     #     ret = draw_top_down_map(env.current_map)
     #     # ret = env.render(mode="topdown", window=False)
@@ -85,9 +66,10 @@ if __name__ == "__main__":
 
     set_random_seed(args.seed)
 
-    model = PPO.load(args.model)
+    scenario = int(args.scenario) if args.scenario.isdigit() else args.scenario
+    env = make_env(scenario=scenario, monitor=False)
 
-    env = test_env(args.scenario)
+    model = PPO.load(args.model)
 
     all_traces = []
     csv_path = os.path.join(args.save_dir, "traces.csv")

@@ -18,20 +18,19 @@ from stable_baselines3.common.vec_env.subproc_vec_env import SubprocVecEnv
 from metadrive.utils.draw_top_down_map import draw_top_down_map
 
 
-def train_env(monitor=True):
-    config = dict(
-        map=2,
-        discrete_action=False,
-        horizon=2000,
-        num_scenarios=1000,
-        start_seed=1000,
-        traffic_density=0.05,
-        need_inverse_traffic=True,
-        accident_prob=0.0,
-        random_lane_width=False,
-        random_agent_model=False,
-        random_lane_num=False,
-    )
+def make_env(scenario, monitor=False):
+    config = MetaDriveEnv.default_config()
+    config.map = scenario
+    config.discrete_action=False
+    config.horizon=2000
+    config.num_scenarios=1000
+    config.start_seed=1000
+    config.traffic_density=0.05
+    config.need_inverse_traffic=True
+    config.accident_prob=0.0
+    config.random_lane_width=False
+    config.random_agent_model=False
+    config.random_lane_num=False
     if monitor:
         return Monitor(MetaDriveEnv(config))
     else:
@@ -59,10 +58,15 @@ if __name__ == "__main__":
         type=int,
         default=1_000_000,
         help="Number of environment steps")
+    parser.add_argument(
+        "--scenario",
+        type=str,
+        default="2",
+        help="Scenario string")
     args = parser.parse_args()
 
     # while True:
-    #     env=train_env(monitor=False)
+    #     env=make_env(monitor=False)
     #     env.reset()
     #     ret = draw_top_down_map(env.current_map)
     #     # ret = env.render(mode="topdown", window=False)
@@ -78,13 +82,12 @@ if __name__ == "__main__":
     #     clear_output()
 
     set_random_seed(args.seed)
-    env = SubprocVecEnv([partial(train_env) for _ in range(args.n_envs)])
-    model = PPO("MlpPolicy", 
-                env=env,
-                n_steps=4096,
-                verbose=1)
-    model.learn(total_timesteps=args.timesteps,
-                log_interval=1)
+
+    scenario = int(args.scenario) if args.scenario.isdigit() else args.scenario
+    env = SubprocVecEnv([partial(make_env, scenario, True) for _ in range(args.n_envs)])
+
+    model = PPO("MlpPolicy", env=env, n_steps=4096, verbose=1)
+    model.learn(total_timesteps=args.timesteps, log_interval=1)
     env.close()
     clear_output()
 
