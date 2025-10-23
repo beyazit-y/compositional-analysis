@@ -34,7 +34,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--model",
         type=str,
-        default="storage/model.zip",
+        required=True,
         help="Saved model zip")
     parser.add_argument(
         "--n",

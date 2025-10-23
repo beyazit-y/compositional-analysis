@@ -49,6 +49,12 @@ if __name__ == "__main__":
         default="storage",
         help="Directory to save the trained model")
     parser.add_argument(
+        "--model",
+        type=str,
+        default=None,
+        help="Model zip name"
+    )
+    parser.add_argument(
         "--n-envs",
         type=int,
         default=16,
@@ -91,7 +97,11 @@ if __name__ == "__main__":
     env.close()
     clear_output()
 
-    save_path = os.path.join(args.save_dir, f"model.zip")
-    model.save(save_path)
+    if args.model is None:
+        arg_str = "_".join(f"{k}={v}" for k, v in vars(args).items() if k != "model")
+        safe_arg_str = arg_str.replace("/", "_").replace(" ", "_")
+        args.model = os.path.join(args.save_dir, f"model_{safe_arg_str}.zip")
+
+    model.save(args.model)
     print("Training is finished.")
 
