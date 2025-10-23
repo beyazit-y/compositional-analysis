@@ -4,6 +4,7 @@ warnings.filterwarnings("ignore", message="pkg_resources is deprecated")
 import os
 import csv
 import argparse
+import numpy as np
 import gymnasium as gym
 from functools import partial
 import matplotlib.pyplot as plt
@@ -30,10 +31,10 @@ def test_env(scenario):
         random_lane_width=False,
         random_agent_model=False,
         random_lane_num=False,
-        vehicle_config={
-            "spawn_velocity": [10.0, 0.0], # m/s; default max_speed_km_h is 80 km/h
-            "spawn_velocity_car_frame": True
-        }
+        # vehicle_config={
+        #     "spawn_velocity": [10.0, 0.0], # m/s; default max_speed_km_h is 80 km/h
+        #     "spawn_velocity_car_frame": True
+        # }
     )
     return MetaDriveEnv(config)
 
@@ -96,6 +97,8 @@ if __name__ == "__main__":
         writer = None
 
         for ep in range(args.n):
+            env.config.vehicle_config.spawn_velocity = [np.random.uniform(low=0, high=80/3.6), 0.0]
+            env.config.vehicle_config.spawn_velocity_car_frame = True
             obs, _ = env.reset()
             done = False
             total_reward = 0.0
@@ -107,10 +110,10 @@ if __name__ == "__main__":
                 obs, reward, done, truncated, info = env.step(action)
                 total_reward += reward
 
-                vehicle = env.vehicle
-                pos = vehicle.position
-                heading = vehicle.heading_theta
-                vel = vehicle.speed
+                agent = env.agent
+                pos = agent.position
+                heading = agent.heading_theta
+                vel = agent.speed
 
                 row = {
                     "trace_id": trace_id,
