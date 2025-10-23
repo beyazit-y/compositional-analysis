@@ -106,6 +106,7 @@ if __name__ == "__main__":
                     "speed": vel,
                     "action": action.tolist() if hasattr(action, "tolist") else action,
                     "reward": reward,
+                    "label" : not done or info.get("arrive_dest")
                 }
 
                 if writer is None:
