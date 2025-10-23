@@ -85,12 +85,14 @@ if __name__ == "__main__":
             done = False
             total_reward = 0.0
             step = 0
+            label = False
 
             print(f"\n=== Episode {ep+1}/{args.n} ===")
             while not done:
                 action, _states = model.predict(obs, deterministic=True)
                 obs, reward, done, truncated, info = env.step(action)
                 total_reward += reward
+                label = not done or info.get("arrive_dest")
 
                 agent = env.agent
                 pos = agent.position
@@ -106,7 +108,7 @@ if __name__ == "__main__":
                     "speed": vel,
                     "action": action.tolist() if hasattr(action, "tolist") else action,
                     "reward": reward,
-                    "label" : not done or info.get("arrive_dest")
+                    "label" : label
                 }
 
                 if writer is None:
@@ -122,6 +124,7 @@ if __name__ == "__main__":
                     window=False
                 )
 
+            print(f"Label: {label}")
             print(f"Episode reward: {total_reward:.2f}")
 
             gif_path = os.path.join(args.save_dir, f"trace_{trace_id:03d}.gif")
