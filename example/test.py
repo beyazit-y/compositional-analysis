@@ -46,6 +46,11 @@ if __name__ == "__main__":
         type=str,
         default="XX",
         help="Scenario string")
+    parser.add_argument(
+        "--gif",
+        action="store_true",
+        help="Generate gifs"
+    )
     args = parser.parse_args()
 
     # while True:
@@ -118,18 +123,20 @@ if __name__ == "__main__":
                 writer.writerow(row)
                 step += 1
 
-                env.render(
-                    mode="topdown",
-                    screen_record=True,
-                    window=False
-                )
+                if args.gif:
+                    env.render(
+                        mode="topdown",
+                        screen_record=True,
+                        window=False
+                    )
 
             print(f"Label: {label}")
             print(f"Episode reward: {total_reward:.2f}")
 
-            gif_path = os.path.join(args.save_dir, f"trace_{trace_id:03d}.gif")
-            env.top_down_renderer.generate_gif(gif_path)
-            print(f"Saved gif to {gif_path}")
+            if args.gif:
+                gif_path = os.path.join(args.save_dir, f"trace_{trace_id:03d}.gif")
+                env.top_down_renderer.generate_gif(gif_path)
+                print(f"Saved gif to {gif_path}")
 
             trace_id += 1
 
