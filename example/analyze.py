@@ -118,6 +118,10 @@ class CompositionalAnalysisEngine:
             if features:
                 s_features = s_last[features].to_numpy()
                 t_features = t_first[features].to_numpy()
+                if s_features.shape[0] < 2 or t_features.shape[0] < 2:
+                    rho_step = 0.0
+                    rel_var_squared_sum += 0.0
+                    continue
                 if norm_feat_idx:
                     for j in norm_feat_idx:
                         s_features[:, j] = self._normalize_features(s_features[:, j].reshape(-1, 1)).flatten()
@@ -159,8 +163,12 @@ if __name__ == "__main__":
     logs = {
         "S": "storage/traces/S/traces.csv",
         "X": "storage/traces/X/traces.csv",
+        "O": "storage/traces/O/traces.csv",
+        "C": "storage/traces/C/traces.csv",
         "SX": "storage/traces/SX/traces.csv",
-        "SXS": "storage/traces/SXS/traces.csv"
+        "SXS": "storage/traces/SXS/traces.csv",
+        "SOS": "storage/traces/SOS/traces.csv",
+        "SCS": "storage/traces/SCS/traces.csv",
     }
     scenario_base = ScenarioBase(logs)
 
@@ -170,7 +178,7 @@ if __name__ == "__main__":
     engine = CompositionalAnalysisEngine(scenario_base)
 
     rho, uncertainty = engine.analyze(
-        "SXS",
+        "SCS",
         features=["x", "y", "heading", "speed"],
         norm_feat_idx=[0, 1]
     )
