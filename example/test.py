@@ -93,7 +93,7 @@ if __name__ == "__main__":
             label = False
 
             print(f"\n=== Episode {ep+1}/{args.n} ===")
-            while not done:
+            while not done and step <= env.config.horizon:
                 action, _states = model.predict(obs, deterministic=True)
                 obs, reward, done, truncated, info = env.step(action)
                 total_reward += reward
