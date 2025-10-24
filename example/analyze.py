@@ -174,5 +174,5 @@ if __name__ == "__main__":
         features=["x", "y", "heading", "speed"],
         norm_feat_idx=[0, 1]
     )
-    print(f"Estimated rho: {rho:.4f} ± {uncertainty:.4f}")
+    print(f"Estimated rho = {rho:.4f} ± {uncertainty:.4f}")
 
