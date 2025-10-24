@@ -38,12 +38,10 @@ class Engine:
             scenario: list of scenario names
             features: list of features to consider for KDE
             norm_feat_idx: indices of features to normalize
-            delta: confidence level for Hoeffding bound (default 95%)
         Returns:
             rho_estimate, uncertainty
         """
         rho = 1.0
-        # Start with zero uncertainty
         rel_var_squared_sum = 0.0  
 
         for i in range(len(scenario) - 1):
@@ -53,11 +51,9 @@ class Engine:
             df_s = self.data[s]
             df_t = self.data[t]
 
-            # Select last step of S that succeeded
             s_last = df_s.sort_values("step").groupby("trace_id").tail(1)
             s_last = s_last[s_last["label"] == True]
 
-            # First and last steps of T
             t_frst = df_t.sort_values("step").groupby("trace_id").head(1)
             t_last = df_t.sort_values("step").groupby("trace_id").tail(1)
 
@@ -65,7 +61,6 @@ class Engine:
                 s_features = s_last[features].to_numpy()
                 t_features = t_frst[features].to_numpy()
 
-            # Normalize selected features
             normalize = lambda x: (x - x.mean(axis=0)) / x.std(axis=0)
             if norm_feat_idx is not None:
                 for j in norm_feat_idx:
@@ -109,8 +104,9 @@ if __name__ == "__main__":
         print(f"{sc}: rho = {engine.rho(sc):.4f} ± {engine.rho_uncertainty(sc):.4f}")
 
     rho, uncertainty = engine.analyze(
-        scenario=["S", "X", "S"],
+        scenario="SXS",
         features=["x", "y", "heading", "speed"],
         norm_feat_idx=[0, 1]
     )
     print(f"Importance-sampled rho: {rho:.4f} ± {uncertainty:.4f}")
+
