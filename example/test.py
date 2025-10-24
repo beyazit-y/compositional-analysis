@@ -84,9 +84,12 @@ if __name__ == "__main__":
         writer = None
 
         for ep in range(args.n):
-            env.config.vehicle_config.spawn_velocity = [np.random.uniform(low=70/3.6, high=80/3.6), 0.0]
-            env.config.vehicle_config.spawn_velocity_car_frame = True
             obs, _ = env.reset()
+
+            initial_speed = np.random.uniform(low=70/3.6, high=80/3.6)
+            initial_velocity = env.vehicle.lane.direction * initial_speed
+            env.vehicle.set_velocity(initial_velocity)
+
             done = False
             total_reward = 0.0
             step = 0
