@@ -1,171 +1,116 @@
-# import pandas as pd
-
-# class Engine:
-#     def __init__(self):
-#         self.scenario = "SX"
-#         self.logs = {
-#             "S": "storage/traces/S/traces.csv",
-#             "X": "storage/traces/X/traces.csv"
-#         }
-
-#         self.data = {name: pd.read_csv(path) for name, path in self.logs.items()}
-
-#         self.rho = {}
-#         for name, df in self.data.items():
-#             last_steps = df.sort_values("step").groupby("trace_id").tail(1)
-#             success_rate = 100 * last_steps["label"].mean()
-#             self.rates[name] = success_rate
-
-#     def analyze(self):
-#         # TODO: Do compositional analysis, i.e., compute rho for the composite scenario "SX" using the resutls for "S" and "X"
-#         # To do so, compute the empirical distribution over x,y,heading,speed,action,reward fields for scenario "S" and then do importance sampling (using this) for the results of "X" and combine rhos based on this
-
-# import pandas as pd
-# from scipy.stats import gaussian_kde
-# import numpy as np
-
-# class Engine:
-#     def __init__(self):
-#         self.scenario = "SX"
-#         self.logs = {
-#             # "S": "storage/traces/S/traces.csv",
-#             # "X": "storage/traces/X/traces.csv",
-#             "S": "temp/traces_half0.csv",
-#             "X": "temp/traces_half1.csv",
-#             "SX": "storage/traces/SX/traces.csv"
-#         }
-
-#         self.data = {name: pd.read_csv(path) for name, path in self.logs.items()}
-
-#         # Store success rates per scenario
-#         self.rates = {}
-#         for name, df in self.data.items():
-#             last_steps = df.sort_values("step").groupby("trace_id").tail(1)
-#             success_rate = 100 * last_steps["label"].mean()
-#             self.rates[name] = success_rate
-
-#         self.rho = {}
-
-#     def analyze(self):
-#         features = ["x", "y", "heading", "speed", "reward"]
-
-#         df_S = self.data["S"]
-#         df_X = self.data["X"]
-
-#         S_last = df_S.sort_values("step").groupby("trace_id").tail(1)
-#         S_last = S_last[S_last["label"] == True]
-
-#         X_frst = df_X.sort_values("step").groupby("trace_id").head(1)
-#         X_last = df_X.sort_values("step").groupby("trace_id").tail(1)
-
-#         S_last_features = S_last[features].to_numpy().T
-#         X_frst_features = X_frst[features].to_numpy().T
-
-#         p_S = gaussian_kde(S_last_features)
-#         q_X = gaussian_kde(X_frst_features)
-
-#         p_vals = p_S(X_frst_features)
-#         q_vals = q_X(X_frst_features)
-#         weights = np.nan_to_num(p_vals / q_vals, nan=0.0, posinf=0.0, neginf=0.0)
-
-#         labels_X_last = X_last["label"].astype(float).to_numpy()
-#         rho_SX = np.sum(weights * labels_X_last) / np.sum(weights)
-
-#         return rho_SX
-
 import pandas as pd
 from sklearn.decomposition import PCA
 from scipy.stats import gaussian_kde
 import numpy as np
 
 class Engine:
-    def __init__(self):
-        self.scenario = "SX"
-        self.logs = {
-            "S": "storage/traces/S/traces.csv",
-            "X": "storage/traces/X/traces.csv",
-            # "S": "temp/traces_half0.csv",
-            # "X": "temp/traces_half1.csv",
-            "SX": "storage/traces/SX/traces.csv"
-        }
+    def __init__(self, logbase, delta=0.05):
+        self.logbase = logbase
+        self.data = {name: pd.read_csv(path) for name, path in self.logbase.items()}
+        self.delta = delta
 
-        self.data = {name: pd.read_csv(path) for name, path in self.logs.items()}
-
-        # Store success rates per scenario
-        self.rates = {}
+        self.success_rates = {}
+        self.success_uncertainties = {}
         for name, df in self.data.items():
             last_steps = df.sort_values("step").groupby("trace_id").tail(1)
-            success_rate = 100 * last_steps["label"].mean()
-            self.rates[name] = success_rate
+            labels = last_steps["label"].astype(float).to_numpy()
+            rho = labels.mean()
+            self.success_rates[name] = rho
+            N = len(labels)
+            if N > 0:
+                epsilon = np.sqrt(np.log(2 / self.delta) / (2 * N))
+            else:
+                epsilon = 0.0
+            self.success_uncertainties[name] = epsilon
 
-        print(self.rates)
+    def rho(self, scenario):
+        return self.success_rates[scenario]
 
-        self.rho = {}
+    def rho_uncertainty(self, scenario):
+        return self.success_uncertainties[scenario]
 
-    def analyze(self):
-        features = ["x", "y", "heading", "speed"]
+    def analyze(self, scenario, features=None, norm_feat_idx=None):
+        """
+        Computes importance-sampled success probability and associated uncertainty
+        using Hoeffding's inequality. Uncertainty is propagated across sequential scenarios.
+        
+        Args:
+            scenario: list of scenario names
+            features: list of features to consider for KDE
+            norm_feat_idx: indices of features to normalize
+            delta: confidence level for Hoeffding bound (default 95%)
+        Returns:
+            rho_estimate, uncertainty
+        """
+        rho = 1.0
+        # Start with zero uncertainty
+        rel_var_squared_sum = 0.0  
 
-        df_S = self.data["S"]
-        df_X = self.data["X"]
+        for i in range(len(scenario) - 1):
+            s = scenario[i]
+            t = scenario[i + 1]
 
-        # Get last step of S traces that succeeded
-        S_last = df_S.sort_values("step").groupby("trace_id").tail(1)
-        S_last = S_last[S_last["label"] == True]
+            df_s = self.data[s]
+            df_t = self.data[t]
 
-        # Get first and last steps of X traces
-        X_frst = df_X.sort_values("step").groupby("trace_id").head(1)
-        X_last = df_X.sort_values("step").groupby("trace_id").tail(1)
+            # Select last step of S that succeeded
+            s_last = df_s.sort_values("step").groupby("trace_id").tail(1)
+            s_last = s_last[s_last["label"] == True]
 
-        # Extract features
-        S_features = S_last[features].to_numpy()
-        X_features = X_frst[features].to_numpy()
+            # First and last steps of T
+            t_frst = df_t.sort_values("step").groupby("trace_id").head(1)
+            t_last = df_t.sort_values("step").groupby("trace_id").tail(1)
 
-        normalize = lambda x: (x - x.mean(axis=0)) / x.std(axis=0)
+            if features is not None:
+                s_features = s_last[features].to_numpy()
+                t_features = t_frst[features].to_numpy()
 
-        S_features[:, 0] = normalize(S_features[:, 0])
-        S_features[:, 1] = normalize(S_features[:, 1])
+            # Normalize selected features
+            normalize = lambda x: (x - x.mean(axis=0)) / x.std(axis=0)
+            if norm_feat_idx is not None:
+                for j in norm_feat_idx:
+                    s_features[:, j] = normalize(s_features[:, j])
+                    t_features[:, j] = normalize(t_features[:, j])
 
-        X_features[:, 0] = normalize(X_features[:, 0])
-        X_features[:, 1] = normalize(X_features[:, 1])
+            s_features = s_features.T
+            t_features = t_features.T
 
-        S_features = S_features.T
-        X_features = X_features.T
+            kde_s = gaussian_kde(s_features)
+            kde_t = gaussian_kde(t_features)
 
-        # # Apply PCA to reduce dimensionality
-        # pca = PCA(n_components=2)
-        # S_pca = pca.fit_transform(S_features)
-        # X_pca = pca.transform(X_features)
+            p_vals = kde_s(t_features)
+            q_vals = kde_t(t_features)
+            weights = np.nan_to_num(p_vals / q_vals, nan=0.0, posinf=0.0, neginf=0.0)
 
-        # # print(S_pca)
-        # # print(X_pca)
-        # # input()
+            labels_t_last = t_last["label"].astype(float).to_numpy()
+            rho_step = np.sum(weights * labels_t_last) / np.sum(weights)
+            rho *= rho_step
 
-        # # Keep only nonzero-variance components
-        # nonzero_var = np.where(pca.explained_variance_ > 1e-10)[0]
-        # S_pca = S_pca[:, nonzero_var].T  # KDE expects shape (dim, n_samples)
-        # X_pca = X_pca[:, nonzero_var].T
+            N_eff = np.sum(weights)**2 / np.sum(weights**2) # effective sample size
+            epsilon_abs = np.sqrt(np.log(2 / self.delta) / (2 * N_eff))
+            if rho_step > 0:
+                epsilon_rel = epsilon_abs / rho_step
+                rel_var_squared_sum += epsilon_rel**2
 
-        # # Fit KDEs
-        # kde_S = gaussian_kde(S_pca)
-        # kde_X = gaussian_kde(X_pca)
-
-        # Fit KDEs
-        kde_S = gaussian_kde(S_features)
-        kde_X = gaussian_kde(X_features)
-
-        # Importance sampling weights
-        p_vals = kde_S(X_features)
-        q_vals = kde_X(X_features)
-        weights = np.nan_to_num(p_vals / q_vals, nan=0.0, posinf=0.0, neginf=0.0)
-
-        # Weighted success rate
-        labels_X_last = X_last["label"].astype(float).to_numpy()
-        rho_SX = np.sum(weights * labels_X_last) / np.sum(weights)
-
-        return rho_SX
+        uncertainty = rho * np.sqrt(rel_var_squared_sum)
+        return rho, uncertainty
 
 
 if __name__ == "__main__":
-    engine = Engine()
-    rho = engine.analyze()
-    print(rho)
+    logbase = {
+        "S": "storage/traces/S/traces.csv",
+        "X": "storage/traces/X/traces.csv",
+        "SX": "storage/traces/SX/traces.csv",
+        "SXS": "storage/traces/SXS/traces.csv"
+    }
+    engine = Engine(logbase)
+    
+    for sc in logbase.keys():
+        print(f"{sc}: rho = {engine.rho(sc):.4f} ± {engine.rho_uncertainty(sc):.4f}")
+
+    rho, uncertainty = engine.analyze(
+        scenario=["S", "X", "S"],
+        features=["x", "y", "heading", "speed"],
+        norm_feat_idx=[0, 1]
+    )
+    print(f"Importance-sampled rho: {rho:.4f} ± {uncertainty:.4f}")
