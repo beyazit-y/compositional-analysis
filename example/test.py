@@ -77,31 +77,40 @@ if __name__ == "__main__":
     model = PPO.load(args.model)
 
     all_traces = []
-    csv_path = os.path.join(args.save_dir, "traces.csv")
     trace_id = 0
 
-    with open(csv_path, "w", newline="") as f:
-        writer = None
+    if not args.gif:
+        csv_path = os.path.join(args.save_dir, "traces.csv")
+        f = open(csv_path, "w", newline="")
+        writer = csv.DictWriter(f, fieldnames=["trace_id", "step", "x", "y", "heading",
+                                               "speed", "action", "reward", "label"])
 
-        for ep in range(args.n):
-            obs, _ = env.reset()
+    for ep in range(args.n):
+        obs, _ = env.reset()
 
-            initial_speed = np.random.uniform(low=70/3.6, high=80/3.6)
-            initial_velocity = env.vehicle.lane.direction * initial_speed
-            env.vehicle.set_velocity(initial_velocity)
+        initial_speed = np.random.uniform(low=70/3.6, high=80/3.6)
+        initial_velocity = env.vehicle.lane.direction * initial_speed
+        env.vehicle.set_velocity(initial_velocity)
 
-            done = False
-            total_reward = 0.0
-            step = 0
-            label = False
+        done = False
+        total_reward = 0.0
+        step = 0
+        label = False
 
-            print(f"\n=== Episode {ep+1}/{args.n} ===")
-            while not done and step <= env.config.horizon:
-                action, _states = model.predict(obs, deterministic=True)
-                obs, reward, done, truncated, info = env.step(action)
-                total_reward += reward
-                label = not done or info.get("arrive_dest")
+        print(f"\n=== Episode {ep+1}/{args.n} ===")
+        while not done and step <= env.config.horizon:
+            action, _states = model.predict(obs, deterministic=True)
+            obs, reward, done, truncated, info = env.step(action)
+            total_reward += reward
+            label = not done or info.get("arrive_dest")
 
+            if args.gif:
+                env.render(
+                    mode="topdown",
+                    screen_record=True,
+                    window=False
+                )
+            else:
                 agent = env.agent
                 pos = agent.position
                 heading = agent.heading_theta
@@ -119,30 +128,22 @@ if __name__ == "__main__":
                     "label" : label
                 }
 
-                if writer is None:
-                    writer = csv.DictWriter(f, fieldnames=row.keys())
-                    writer.writeheader()
-
                 writer.writerow(row)
-                step += 1
 
-                if args.gif:
-                    env.render(
-                        mode="topdown",
-                        screen_record=True,
-                        window=False
-                    )
+            step += 1
 
-            print(f"Label: {label}")
-            print(f"Episode reward: {total_reward:.2f}")
+        print(f"Label: {label}")
+        print(f"Episode reward: {total_reward:.2f}")
 
-            if args.gif:
-                gif_path = os.path.join(args.save_dir, f"trace_{trace_id:03d}.gif")
-                env.top_down_renderer.generate_gif(gif_path)
-                print(f"Saved gif to {gif_path}")
+        if args.gif:
+            gif_path = os.path.join(args.save_dir, f"trace_{trace_id:03d}.gif")
+            env.top_down_renderer.generate_gif(gif_path)
+            print(f"Saved gif to {gif_path}")
 
-            trace_id += 1
+        trace_id += 1
+
+    if not args.gif:
+        f.close()
 
     env.close()
-    print(f"\nAll {args.n} traces saved to {csv_path}")
 
