@@ -95,33 +95,32 @@ class CompositionalAnalysisEngine:
         Returns:
             Tuple of (rho_estimate, uncertainty)
         """
-        if len(scenario) < 2:
-            raise ValueError("Scenario list must contain at least two scenarios.")
+        if len(scenario) == 0:
+            raise ValueError("Scenario list must contain at least one scenario.")
 
         rho = 1.0
-        rel_var_squared_sum = 0.0
+        rho_bounds = []
+
+        n = len(scenario)
         delta = self.scenario_base.delta
+        per_step_delta = delta / n  # union bound
 
         for i in range(len(scenario) - 1):
-            s_name, t_name = scenario[i], scenario[i + 1]
+            s_name, t_name = scenario[i], scenario[i+1]
             df_s, df_t = self.scenario_base.data[s_name], self.scenario_base.data[t_name]
 
-            # Successful end states of current scenario
+            # Select successful endpoints
             s_last = df_s.sort_values("step").groupby("trace_id").tail(1)
             s_last = s_last[s_last["label"] == True]
-
-            # First and last states of next scenario
             t_first = df_t.sort_values("step").groupby("trace_id").head(1)
             t_last = df_t.sort_values("step").groupby("trace_id").tail(1)
 
-            # Select features for KDE
+            # KDE features (same as your code)
             if features:
                 s_features = s_last[features].to_numpy()
                 t_features = t_first[features].to_numpy()
                 if s_features.shape[0] < 2 or t_features.shape[0] < 2:
-                    rho_step = 0.0
-                    rel_var_squared_sum += 0.0
-                    continue
+                    return 0.0, 0.0
                 if norm_feat_idx:
                     for j in norm_feat_idx:
                         s_features[:, j] = self._normalize_features(s_features[:, j].reshape(-1, 1)).flatten()
@@ -129,33 +128,30 @@ class CompositionalAnalysisEngine:
             else:
                 raise ValueError("Feature list must be provided for KDE.")
 
-            # KDE expects shape (dim, N)
             s_features, t_features = s_features.T, t_features.T
-
             kde_s = gaussian_kde(s_features)
             kde_t = gaussian_kde(t_features)
-
-            # Importance weights
             p_vals = kde_s(t_features)
             q_vals = kde_t(t_features)
             weights = np.nan_to_num(p_vals / q_vals, nan=0.0, posinf=0.0, neginf=0.0)
 
             labels_t_last = t_last["label"].astype(float).to_numpy()
-            if len(weights) != len(labels_t_last):
-                min_len = min(len(weights), len(labels_t_last))
-                weights = weights[:min_len]
-                labels_t_last = labels_t_last[:min_len]
+            min_len = min(len(weights), len(labels_t_last))
+            weights = weights[:min_len]
+            labels_t_last = labels_t_last[:min_len]
 
             rho_step = np.sum(weights * labels_t_last) / np.sum(weights) if np.sum(weights) > 0 else 0.0
             rho *= rho_step
 
-            # Effective sample size
-            N_eff = np.sum(weights) ** 2 / np.sum(weights**2) if np.sum(weights**2) > 0 else 1.0
-            epsilon_abs = np.sqrt(np.log(2 / delta) / (2 * N_eff))
-            epsilon_rel = epsilon_abs / rho_step if rho_step > 0 else 0.0
-            rel_var_squared_sum += epsilon_rel**2
+            # Hoeffding absolute bound with effective samples
+            N_eff = np.sum(weights)**2 / np.sum(weights**2) if np.sum(weights**2) > 0 else 1.0
+            epsilon_i = np.sqrt(np.log(2 / per_step_delta) / (2 * N_eff))
+            rho_bounds.append(epsilon_i)
 
-        uncertainty = rho * np.sqrt(rel_var_squared_sum)
+        # Provable multiplicative error
+        prod_factor = np.prod([1 + eps / max(rho_step, 1e-12) for eps in rho_bounds])
+        uncertainty = rho * (prod_factor - 1)
+
         return rho, uncertainty
 
 
@@ -166,21 +162,26 @@ if __name__ == "__main__":
         "O": "storage/traces/O/traces.csv",
         "C": "storage/traces/C/traces.csv",
         "SX": "storage/traces/SX/traces.csv",
+        "SO": "storage/traces/SO/traces.csv",
+        "SC": "storage/traces/SC/traces.csv",
         "SXS": "storage/traces/SXS/traces.csv",
         "SOS": "storage/traces/SOS/traces.csv",
         "SCS": "storage/traces/SCS/traces.csv",
     }
     scenario_base = ScenarioBase(logs)
 
+    print("SMC")
     for s in logs:
         print(f"{s}: rho = {scenario_base.get_success_rate(s):.4f} ± {scenario_base.get_success_rate_uncertainty(s):.4f}")
 
     engine = CompositionalAnalysisEngine(scenario_base)
 
-    rho, uncertainty = engine.analyze(
-        "SCS",
-        features=["x", "y", "heading", "speed"],
-        norm_feat_idx=[0, 1]
-    )
-    print(f"Estimated rho = {rho:.4f} ± {uncertainty:.4f}")
+    print("Compositional SMC")
+    for s in logs:
+        rho, uncertainty = engine.analyze(
+            s,
+            features=["x", "y", "heading", "speed"],
+            norm_feat_idx=[0, 1]
+        )
+        print(f"Estimated {s}: rho = {rho:.4f} ± {uncertainty:.4f}")
 
