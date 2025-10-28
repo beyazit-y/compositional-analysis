@@ -102,6 +102,10 @@ class CompositionalAnalysisEngine:
         rho_bounds = []
 
         n = len(scenario)
+        if n == 1:
+            result = self.scenario_base.success_stats[scenario]
+            return result.rho, result.uncertainty
+
         delta = self.scenario_base.delta
         per_step_delta = delta / n  # union bound
 
