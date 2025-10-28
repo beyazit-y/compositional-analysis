@@ -1,6 +1,6 @@
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Sequence, Union
 
 import numpy as np
 import pandas as pd
@@ -78,7 +78,7 @@ class CompositionalAnalysisEngine:
         std[std == 0] = 1.0  # Avoid division by zero
         return (features - mean) / std
 
-    def analyze(
+    def check(
         self,
         scenario: List[str],
         features: Optional[List[str]] = None,
@@ -115,24 +115,24 @@ class CompositionalAnalysisEngine:
             t_first = df_t.sort_values("step").groupby("trace_id").head(1)
             t_last = df_t.sort_values("step").groupby("trace_id").tail(1)
 
-            # KDE features (same as your code)
+            # KDE features
             if features:
-                s_features = s_last[features].to_numpy()
-                t_features = t_first[features].to_numpy()
-                if s_features.shape[0] < 2 or t_features.shape[0] < 2:
+                s_last_features = s_last[features].to_numpy()
+                t_first_features = t_first[features].to_numpy()
+                if s_last_features.shape[0] < 2 or t_first_features.shape[0] < 2:
                     return 0.0, 0.0
                 if norm_feat_idx:
                     for j in norm_feat_idx:
-                        s_features[:, j] = self._normalize_features(s_features[:, j].reshape(-1, 1)).flatten()
-                        t_features[:, j] = self._normalize_features(t_features[:, j].reshape(-1, 1)).flatten()
+                        s_last_features[:, j] = self._normalize_features(s_last_features[:, j].reshape(-1, 1)).flatten()
+                        t_first_features[:, j] = self._normalize_features(t_first_features[:, j].reshape(-1, 1)).flatten()
             else:
                 raise ValueError("Feature list must be provided for KDE.")
 
-            s_features, t_features = s_features.T, t_features.T
-            kde_s = gaussian_kde(s_features)
-            kde_t = gaussian_kde(t_features)
-            p_vals = kde_s(t_features)
-            q_vals = kde_t(t_features)
+            s_last_features, t_first_features = s_last_features.T, t_first_features.T
+            kde_s_last = gaussian_kde(s_last_features)
+            kde_t_first = gaussian_kde(t_first_features)
+            p_vals = kde_s_last(t_first_features)
+            q_vals = kde_t_first(t_first_features)
             weights = np.nan_to_num(p_vals / q_vals, nan=0.0, posinf=0.0, neginf=0.0)
 
             labels_t_last = t_last["label"].astype(float).to_numpy()
@@ -153,6 +153,111 @@ class CompositionalAnalysisEngine:
         uncertainty = rho * (prod_factor - 1)
 
         return rho, uncertainty
+
+    def falsify(
+        self,
+        scenario: Union[str, Sequence[str]],
+        features: Optional[List[str]] = None,
+        norm_feat_idx: Optional[List[int]] = None,
+    ) -> Tuple[Optional[pd.DataFrame], float]:
+        """
+        Computes importance-sampled success probability and propagated uncertainty.
+
+        Args:
+            scenario: Ordered list of scenario names
+            features: Optional list of features to include in KDE
+            norm_feat_idx: Optional indices of features to normalize
+
+        Returns:
+            Tuple of (rho_estimate, uncertainty)
+        """
+        if len(scenario) == 0:
+            raise ValueError("Scenario list must contain at least one scenario.")
+
+        rho = 1.0
+        rho_bounds = []
+
+        n = len(scenario)
+        delta = self.scenario_base.delta
+        per_step_delta = delta / n  # union bound
+
+        cex = None
+
+        for i in reversed(range(len(scenario) - 1)):
+            s_name, t_name = scenario[i], scenario[i+1]
+            df_s, df_t = self.scenario_base.data[s_name], self.scenario_base.data[t_name]
+
+            # Select successful endpoints
+            s_traces = df_s.sort_values("step").groupby("trace_id")
+            t_traces = df_t.sort_values("step").groupby("trace_id")
+
+            s_last = s_traces.tail(1).sort_values("trace_id")
+            t_first = t_traces.head(1).sort_values("trace_id")
+            t_last = t_traces.tail(1).sort_values("trace_id")
+
+            s_last = s_last[s_last["label"] == True].sort_values("trace_id")
+
+            fail_idx = (t_last["label"] == False).to_numpy()
+            t_first = t_first[fail_idx].sort_values("trace_id")
+            t_last = t_last[fail_idx].sort_values("trace_id")
+
+            # if t_first.empty or t_last.empty:
+            #     continue
+
+            # KDE features
+            if features:
+                s_last_features = s_last[features].to_numpy()
+                t_first_features = t_first[features].to_numpy()
+                t_last_features = t_last[features].to_numpy()
+                if s_last_features.shape[0] < 2 or t_first_features.shape[0] < 2 or t_last_features.shape[0] < 2:
+                    return 0.0, 0.0
+                if norm_feat_idx:
+                    for j in norm_feat_idx:
+                        s_last_features[:, j] = self._normalize_features(s_last_features[:, j].reshape(-1, 1)).flatten()
+                        t_first_features[:, j] = self._normalize_features(t_first_features[:, j].reshape(-1, 1)).flatten()
+                        t_last_features[:, j] = self._normalize_features(t_last_features[:, j].reshape(-1, 1)).flatten()
+            else:
+                raise ValueError("Feature list must be provided for KDE.")
+
+            s_last_features, t_first_features, t_last_features = s_last_features.T, t_first_features.T, t_last_features.T
+
+            kde_s_last = gaussian_kde(s_last_features)
+            kde_t_first = gaussian_kde(t_first_features)
+            kde_t_last = gaussian_kde(t_last_features)
+
+            s_last_prob = kde_t_first(s_last_features)
+            t_first_prob = kde_s_last(t_first_features)
+
+            s_idx = np.argmax(s_last_prob)
+            t_idx = np.argmax(t_first_prob)
+
+            s_trace_id = s_last.iloc[s_idx]["trace_id"]
+            t_trace_id = t_first.iloc[t_idx]["trace_id"]
+
+            s_trace = s_traces.get_group(s_trace_id)
+            t_trace = t_traces.get_group(t_trace_id)
+
+            s_xy = s_trace[["x", "y"]]
+            t_xy = t_trace[["x", "y"]]
+
+            offset = s_xy.iloc[-1] - t_xy.iloc[0]
+            t_xy_new = t_xy + offset
+
+            t_trace["x"] = t_xy_new["x"]
+            t_trace["y"] = t_xy_new["y"]
+
+            result = pd.concat([s_trace, t_trace]) # Works for SX.
+
+        # Provable multiplicative error
+        prod_factor = np.prod([1 + eps / max(rho_step, 1e-12) for eps in rho_bounds])
+        uncertainty = rho * (prod_factor - 1)
+
+        return rho, uncertainty
+
+
+
+
+
 
 
 if __name__ == "__main__":
@@ -176,9 +281,13 @@ if __name__ == "__main__":
 
     engine = CompositionalAnalysisEngine(scenario_base)
 
+    pd.set_option('display.max_rows', None)  # Display all rows
+    pd.set_option('display.max_columns', None) # Display all columns
+    pd.set_option('display.width', 1000) # Ensure enough width to prevent wrapping
+
     print("Compositional SMC")
     for s in logs:
-        rho, uncertainty = engine.analyze(
+        rho, uncertainty = engine.check(
             s,
             features=["x", "y", "heading", "speed"],
             norm_feat_idx=[0, 1]
