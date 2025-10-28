@@ -163,105 +163,163 @@ class CompositionalAnalysisEngine:
         scenario: Union[str, Sequence[str]],
         features: Optional[List[str]] = None,
         norm_feat_idx: Optional[List[int]] = None,
+        align_feat_idx: Optional[List[int]] = None,
     ) -> Tuple[Optional[pd.DataFrame], float]:
         """
-        Computes importance-sampled success probability and propagated uncertainty.
+        Generates a counterexample trace using the given traces.
 
         Args:
             scenario: Ordered list of scenario names
             features: Optional list of features to include in KDE
             norm_feat_idx: Optional indices of features to normalize
+            align_feat_idx: Optional indices of features to align
 
         Returns:
-            Tuple of (rho_estimate, uncertainty)
+            Trace
         """
         if len(scenario) == 0:
             raise ValueError("Scenario list must contain at least one scenario.")
 
-        rho = 1.0
-        rho_bounds = []
-
-        n = len(scenario)
-        delta = self.scenario_base.delta
-        per_step_delta = delta / n  # union bound
-
         cex = None
+        n = len(scenario)
 
-        for i in reversed(range(len(scenario) - 1)):
-            s_name, t_name = scenario[i], scenario[i+1]
-            df_s, df_t = self.scenario_base.data[s_name], self.scenario_base.data[t_name]
+        if n == 1:
+            t_name = scenario[0]
+            df_t = self.scenario_base.data[t_name]
 
-            # Select successful endpoints
-            s_traces = df_s.sort_values("step").groupby("trace_id")
             t_traces = df_t.sort_values("step").groupby("trace_id")
-
-            s_last = s_traces.tail(1).sort_values("trace_id")
             t_first = t_traces.head(1).sort_values("trace_id")
             t_last = t_traces.tail(1).sort_values("trace_id")
-
-            s_last = s_last[s_last["label"] == True].sort_values("trace_id")
 
             fail_idx = (t_last["label"] == False).to_numpy()
             t_first = t_first[fail_idx].sort_values("trace_id")
             t_last = t_last[fail_idx].sort_values("trace_id")
 
-            # if t_first.empty or t_last.empty:
-            #     continue
+            if t_first.empty or t_last.empty:
+                return None
+
+            t_last_features = t_last[features].to_numpy()
+            if t_last_features.shape[0] < 1:
+                return None
+            elif t_last_features.shape[0] == 2:
+                t_trace_id = t_last_features[0]["trace_id"]
+                t_trace = t_traces.get_group(t_trace_id)
+                return t_trace
+
+            if norm_feat_idx:
+                for j in norm_feat_idx:
+                    t_last_features[:, j] = self._normalize_features(t_last_features[:, j].reshape(-1, 1)).flatten()
+
+            kde_t_last = gaussian_kde(t_last_features.T)
+            t_last_prob = kde_t_last(t_last_features.T)
+            t_idx = np.argmax(t_last_prob)
+            t_trace_id = t_first.iloc[t_idx]["trace_id"]
+            t_trace = t_traces.get_group(t_trace_id)
+            return t_trace
+
+        for i in reversed(range(n - 1)):
+            s_name, t_name = scenario[i], scenario[i+1]
+            df_s, df_t = self.scenario_base.data[s_name], self.scenario_base.data[t_name]
+
+            s_traces = df_s.sort_values("step").groupby("trace_id")
+            s_last = s_traces.tail(1).sort_values("trace_id")
+            s_last = s_last[s_last["label"] == True].sort_values("trace_id")
+
+            if cex is None:
+                t_traces = df_t.sort_values("step").groupby("trace_id")
+                t_first = t_traces.head(1).sort_values("trace_id")
+                t_last = t_traces.tail(1).sort_values("trace_id")
+
+                fail_idx = (t_last["label"] == False).to_numpy()
+                t_first = t_first[fail_idx].sort_values("trace_id")
+                t_last = t_last[fail_idx].sort_values("trace_id")
+
+                if t_first.empty or t_last.empty:
+                    continue
 
             # KDE features
             if features:
                 s_last_features = s_last[features].to_numpy()
-                t_first_features = t_first[features].to_numpy()
-                t_last_features = t_last[features].to_numpy()
-                if s_last_features.shape[0] < 2 or t_first_features.shape[0] < 2 or t_last_features.shape[0] < 2:
-                    return 0.0, 0.0
+                if s_last_features.shape[0] < 2:
+                    continue
+                if cex is None:
+                    t_first_features = t_first[features].to_numpy()
+                    t_last_features = t_last[features].to_numpy()
+                    if t_first_features.shape[0] < 2 or t_last_features.shape[0] < 2:
+                        continue
                 if norm_feat_idx:
                     for j in norm_feat_idx:
                         s_last_features[:, j] = self._normalize_features(s_last_features[:, j].reshape(-1, 1)).flatten()
-                        t_first_features[:, j] = self._normalize_features(t_first_features[:, j].reshape(-1, 1)).flatten()
-                        t_last_features[:, j] = self._normalize_features(t_last_features[:, j].reshape(-1, 1)).flatten()
+                        if cex is None:
+                            t_first_features[:, j] = self._normalize_features(t_first_features[:, j].reshape(-1, 1)).flatten()
+                            t_last_features[:, j] = self._normalize_features(t_last_features[:, j].reshape(-1, 1)).flatten()
             else:
                 raise ValueError("Feature list must be provided for KDE.")
 
-            s_last_features, t_first_features, t_last_features = s_last_features.T, t_first_features.T, t_last_features.T
+            # s_last_features, t_first_features, t_last_features = s_last_features.T, t_first_features.T, t_last_features.T
 
-            kde_s_last = gaussian_kde(s_last_features)
-            kde_t_first = gaussian_kde(t_first_features)
-            kde_t_last = gaussian_kde(t_last_features)
+            if cex is None:
+                kde_s_last = gaussian_kde(s_last_features.T)
+                kde_t_first = gaussian_kde(t_first_features.T)
 
-            s_last_prob = kde_t_first(s_last_features)
-            t_first_prob = kde_s_last(t_first_features)
+                s_last_prob = kde_t_first(s_last_features.T)
+                t_first_prob = kde_s_last(t_first_features.T)
 
-            s_idx = np.argmax(s_last_prob)
-            t_idx = np.argmax(t_first_prob)
+                s_idx = np.argmax(s_last_prob)
+                t_idx = np.argmax(t_first_prob)
 
-            s_trace_id = s_last.iloc[s_idx]["trace_id"]
-            t_trace_id = t_first.iloc[t_idx]["trace_id"]
+                s_trace_id = s_last.iloc[s_idx]["trace_id"]
+                t_trace_id = t_first.iloc[t_idx]["trace_id"]
 
-            s_trace = s_traces.get_group(s_trace_id)
-            t_trace = t_traces.get_group(t_trace_id)
+                s_trace = s_traces.get_group(s_trace_id)
+                t_trace = t_traces.get_group(t_trace_id)
 
-            s_xy = s_trace[["x", "y"]]
-            t_xy = t_trace[["x", "y"]]
+                if align_feat_idx:
+                    for idx in align_feat_idx:
+                        s_feat = s_trace[features[idx]]
+                        t_feat = t_trace[features[idx]]
+                        offset = s_feat.iloc[-1] - t_feat.iloc[0]
+                        t_trace.loc[:, features[idx]] = t_feat + offset
 
-            offset = s_xy.iloc[-1] - t_xy.iloc[0]
-            t_xy_new = t_xy + offset
+                cex = t_trace
 
-            t_trace["x"] = t_xy_new["x"]
-            t_trace["y"] = t_xy_new["y"]
+            else:
+                # TODO implemented: find s_trace with last state closest to the first state of cex
+                # compute the features to compare: use align_feat_idx if provided else all features
+                if align_feat_idx:
+                    compare_idx = align_feat_idx
+                else:
+                    compare_idx = list(range(len(features)))
 
-            result = pd.concat([s_trace, t_trace]) # Works for SX.
+                # build arrays
+                # s_last_features rows correspond to s_last (they were computed above)
+                s_feat_mat = s_last_features[:, compare_idx]  # shape (num_s_last, k)
+                cex_first = cex[features].iloc[0].to_numpy()[compare_idx]  # shape (k,)
 
-        # Provable multiplicative error
-        prod_factor = np.prod([1 + eps / max(rho_step, 1e-12) for eps in rho_bounds])
-        uncertainty = rho * (prod_factor - 1)
+                # compute Euclidean distances
+                diffs = s_feat_mat - cex_first.reshape(1, -1)
+                dists = np.linalg.norm(diffs, axis=1)
 
-        return rho, uncertainty
+                # choose the s trace with minimum distance
+                s_idx = int(np.argmin(dists))
+                s_trace_id = s_last.iloc[s_idx]["trace_id"]
+                s_trace = s_traces.get_group(s_trace_id)
 
+                # Align cex to s_trace if align_feat_idx provided
+                if align_feat_idx:
+                    for idx in align_feat_idx:
+                        s_feat = s_trace[features[idx]]
+                        cex_feat = cex[features[idx]]
+                        offset = s_feat.iloc[-1] - cex_feat.iloc[0]
+                        cex.loc[:, features[idx]] = cex_feat + offset
 
+            cex = pd.concat([s_trace, cex])
 
+        if cex is None:
+            return None
 
-
+        final_features = [feat for feat in features] + ["label"]
+        return cex[final_features]
 
 
 if __name__ == "__main__":
@@ -294,7 +352,14 @@ if __name__ == "__main__":
         rho, uncertainty = engine.check(
             s,
             features=["x", "y", "heading", "speed"],
-            norm_feat_idx=[0, 1]
+            norm_feat_idx=[0, 1],
         )
         print(f"Estimated {s}: rho = {rho:.4f} ± {uncertainty:.4f}")
+        cex = engine.falsify(
+            s,
+            features=["x", "y", "heading", "speed"],
+            norm_feat_idx=[0, 1],
+            align_feat_idx=[0, 1],
+        )
+        print(f"Counterexample = {cex}")
 
