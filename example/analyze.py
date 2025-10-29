@@ -319,7 +319,7 @@ class CompositionalAnalysisEngine:
             return None
 
         final_features = [feat for feat in features] + ["label"]
-        return cex[final_features]
+        return cex[final_features].reset_index(drop=True)
 
 
 if __name__ == "__main__":
